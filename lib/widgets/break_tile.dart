@@ -3,8 +3,14 @@ import 'package:flutter/material.dart';
 class BreakTile extends StatelessWidget {
   final int minutes;
   final ValueChanged<int> onChanged;
+  final bool locked;
 
-  const BreakTile({super.key, required this.minutes, required this.onChanged});
+  const BreakTile({
+    super.key,
+    required this.minutes,
+    required this.onChanged,
+    required this.locked,
+  });
 
   Future<void> _editBreak(BuildContext context) async {
     final controller = TextEditingController(text: minutes.toString());
@@ -58,7 +64,7 @@ class BreakTile extends StatelessWidget {
         title: const Text("Break"),
 
         subtitle: GestureDetector(
-          onTap: () => _editBreak(context),
+          onTap: locked ? null : () => _editBreak(context),
 
           child: Text(
             "$minutes min",

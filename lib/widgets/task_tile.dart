@@ -9,11 +9,14 @@ class TaskTile extends StatelessWidget {
 
   final ValueChanged<int> onDurationChanged;
 
+  final bool locked;
+
   const TaskTile({
     super.key,
     required this.task,
     required this.onDelete,
     required this.onDurationChanged,
+    required this.locked,
   });
 
   @override
@@ -28,43 +31,45 @@ class TaskTile extends StatelessWidget {
         ),
 
         subtitle: InkWell(
-          onTap: () async {
-            final controller = TextEditingController(
-              text: task.duration.toString(),
-            );
+          onTap: locked
+              ? null
+              : () async {
+                  final controller = TextEditingController(
+                    text: task.duration.toString(),
+                  );
 
-            final result = await showDialog<int>(
-              context: context,
-              builder: (_) => AlertDialog(
-                title: const Text("Task Duration"),
-                content: TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(suffixText: "min"),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancel"),
-                  ),
-                  FilledButton(
-                    onPressed: () {
-                      final minutes = int.tryParse(controller.text);
+                  final result = await showDialog<int>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text("Task Duration"),
+                      content: TextField(
+                        controller: controller,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(suffixText: "min"),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Cancel"),
+                        ),
+                        FilledButton(
+                          onPressed: () {
+                            final minutes = int.tryParse(controller.text);
 
-                      if (minutes != null && minutes >= 5) {
-                        Navigator.pop(context, minutes);
-                      }
-                    },
-                    child: const Text("Save"),
-                  ),
-                ],
-              ),
-            );
+                            if (minutes != null && minutes >= 5) {
+                              Navigator.pop(context, minutes);
+                            }
+                          },
+                          child: const Text("Save"),
+                        ),
+                      ],
+                    ),
+                  );
 
-            if (result != null) {
-              onDurationChanged(result);
-            }
-          },
+                  if (result != null) {
+                    onDurationChanged(result);
+                  }
+                },
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -90,22 +95,29 @@ class TaskTile extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.remove_circle_outline),
 
-              onPressed: () {
-                if (task.duration > 5) {
-                  onDurationChanged(task.duration - 5);
-                }
-              },
+              onPressed: locked
+                  ? null
+                  : () {
+                      if (task.duration > 5) {
+                        onDurationChanged(task.duration - 5);
+                      }
+                    },
             ),
 
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
 
-              onPressed: () {
-                onDurationChanged(task.duration + 5);
-              },
+              onPressed: locked
+                  ? null
+                  : () {
+                      onDurationChanged(task.duration + 5);
+                    },
             ),
 
-            IconButton(icon: const Icon(Icons.delete), onPressed: onDelete),
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: locked ? null : onDelete,
+            ),
           ],
         ),
       ),

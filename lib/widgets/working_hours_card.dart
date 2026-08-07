@@ -6,11 +6,13 @@ class WorkingHoursCard extends StatelessWidget {
 
   final ValueChanged<TimeOfDay> onStartChanged;
   final ValueChanged<TimeOfDay> onEndChanged;
+  final bool locked;
 
   const WorkingHoursCard({
     super.key,
     required this.startTime,
     required this.endTime,
+    required this.locked,
     required this.onStartChanged,
     required this.onEndChanged,
   });
@@ -51,9 +53,11 @@ class WorkingHoursCard extends StatelessWidget {
 
               children: [
                 OutlinedButton.icon(
-                  onPressed: () {
-                    _pickTime(context, startTime, onStartChanged);
-                  },
+                  onPressed: locked
+                      ? null
+                      : () {
+                          _pickTime(context, startTime, onStartChanged);
+                        },
 
                   icon: const Icon(Icons.schedule),
 
@@ -63,9 +67,11 @@ class WorkingHoursCard extends StatelessWidget {
                 const Icon(Icons.arrow_forward),
 
                 OutlinedButton.icon(
-                  onPressed: () {
-                    _pickTime(context, endTime, onEndChanged);
-                  },
+                  onPressed: locked
+                      ? null
+                      : () {
+                          _pickTime(context, endTime, onEndChanged);
+                        },
 
                   icon: const Icon(Icons.schedule),
 

@@ -85,4 +85,7 @@ class DayPlan {
       locked: json["locked"] ?? false,
     );
   }
+  void lock() {
+    locked = true;
+  }
 }

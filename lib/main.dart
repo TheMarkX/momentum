@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:momentum/providers/scheduler_provider.dart';
+import 'package:provider/provider.dart';
 
 import 'screens/dashboard.dart';
 import 'utils/theme.dart';
 
 void main() {
-  runApp(const MomentumApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => SchedulerProvider(),
+      child: const MomentumApp(),
+    ),
+  );
 }
 
 class MomentumApp extends StatelessWidget {
