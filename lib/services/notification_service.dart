@@ -16,7 +16,7 @@ class NotificationService {
   // ===========================================================================
 
   Future<void> initialize({
-    required void Function(String actionId, String? payload) onAction,
+    required Future<void> Function(String actionId, String? payload) onAction,
   }) async {
     // -------------------------------------------------------------------------
     // TIMEZONE
@@ -36,16 +36,15 @@ class NotificationService {
 
     await notifications.initialize(
       const InitializationSettings(android: android),
-      onDidReceiveNotificationResponse: (response) {
-        final String? actionId = response.actionId;
-
-        if (actionId == null || actionId.isEmpty) {
-          return;
-        }
-
-        onAction(actionId, response.payload);
+      onDidReceiveNotificationResponse: (response) async {
+        await onAction(response.actionId ?? '', response.payload);
       },
     );
+    await notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
 
     // -------------------------------------------------------------------------
     // PERMISSIONS

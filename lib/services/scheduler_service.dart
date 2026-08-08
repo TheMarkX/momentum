@@ -80,6 +80,10 @@ class SchedulerService {
     return 4000 + taskIndex;
   }
 
+  int _completionGraceExpiryNotificationId(int taskIndex) {
+    return 5000 + taskIndex;
+  }
+
   // ---------------------------------------------------------------------------
   // GETTERS
   // ---------------------------------------------------------------------------
@@ -161,7 +165,25 @@ class SchedulerService {
     });
   }
 
-  void stop() {
+  Future<void> completionGraceExpired() async {
+    if (state.stage != ScheduleStage.taskCompletionGrace) {
+      return;
+    }
+
+    final index = state.currentTaskIndex;
+
+    await NotificationService.instance.notifications.cancel(
+      _completionNotificationId(index),
+    );
+
+    await NotificationService.instance.notifications.cancel(
+      _completionGraceExpiryNotificationId(index),
+    );
+
+    _taskFailed();
+  }
+
+  Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
 
@@ -170,7 +192,7 @@ class SchedulerService {
 
     _paused = false;
 
-    _cancelCurrentTaskNotifications();
+    await _cancelCurrentTaskNotifications();
   }
 
   void pause() {
@@ -205,7 +227,6 @@ class SchedulerService {
         break;
 
       case ScheduleStage.taskCompletionGrace:
-        _resumeCompletionGrace();
         break;
 
       case ScheduleStage.breakTime:
@@ -291,12 +312,12 @@ class SchedulerService {
             AndroidNotificationAction(
               'accountability_yes',
               'Yes',
-              showsUserInterface: true,
+              showsUserInterface: false,
             ),
             AndroidNotificationAction(
               'accountability_no',
               'No',
-              showsUserInterface: true,
+              showsUserInterface: false,
             ),
           ],
         ),
@@ -306,51 +327,36 @@ class SchedulerService {
     );
   }
 
-  void _scheduleRandomNotification() {
+  Future<void> _scheduleRandomNotification() async {
     _answeredYes = false;
     _noCount = 0;
 
-    _cancelAccountabilityNotification();
-
-    _scheduleAccountabilityNotification();
+    await _cancelAccountabilityNotification();
+    await _scheduleAccountabilityNotification();
   }
 
   Duration _getAccountabilityDelay() {
     switch (_noCount) {
       case 0:
-        // First:
-        // 0–15 minutes
-        return Duration(seconds: _random.nextInt(15 * 60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(15 * 60));
 
       case 1:
-        // Second:
-        // 0–10 minutes
-        return Duration(seconds: _random.nextInt(10 * 60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(10 * 60));
 
       case 2:
-        // Third:
-        // 0–5 minutes
-        return Duration(seconds: _random.nextInt(5 * 60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(5 * 60));
 
       case 3:
-        // Fourth:
-        // 0–4 minutes
-        return Duration(seconds: _random.nextInt(4 * 60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(4 * 60));
 
       case 4:
-        // Fifth:
-        // 0–3 minutes
-        return Duration(seconds: _random.nextInt(3 * 60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(3 * 60));
 
       case 5:
-        // Sixth:
-        // 0–2 minutes
-        return Duration(seconds: _random.nextInt(2 * 60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(2 * 60));
 
       case 6:
-        // Seventh:
-        // 0–1 minute
-        return Duration(seconds: _random.nextInt(60 + 1));
+        return Duration(seconds: 1 + _random.nextInt(60));
 
       case 7:
         return const Duration(seconds: 30);
@@ -362,7 +368,6 @@ class SchedulerService {
         return const Duration(seconds: 10);
 
       default:
-        // Never below 5 seconds.
         return const Duration(seconds: 5);
     }
   }
@@ -484,18 +489,49 @@ class SchedulerService {
             AndroidNotificationAction(
               'task_completed_yes',
               'Yes',
-              showsUserInterface: true,
+              showsUserInterface: false,
             ),
             AndroidNotificationAction(
               'task_completed_no',
               'No',
-              showsUserInterface: true,
+              showsUserInterface: false,
             ),
           ],
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: 'task_completion:$taskIndex',
+    );
+  }
+
+  Future<void> _scheduleCompletionGraceExpiry() async {
+    final taskIndex = state.currentTaskIndex;
+
+    final taskEnd = _currentTaskEndsAt;
+
+    if (taskEnd == null) {
+      return;
+    }
+
+    final graceExpiry = taskEnd.add(const Duration(minutes: 5));
+
+    await NotificationService.instance.notifications.zonedSchedule(
+      _completionGraceExpiryNotificationId(taskIndex),
+      'Momentum',
+      'completion_grace_expired',
+      tz.TZDateTime.from(graceExpiry, tz.local),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'momentum_internal',
+          'Momentum Internal',
+          channelDescription: 'Internal Momentum scheduler events',
+          importance: Importance.min,
+          priority: Priority.min,
+          silent: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: 'completion_grace_expired:$taskIndex',
     );
   }
 
@@ -515,34 +551,7 @@ class SchedulerService {
       taskIndex: index,
       remaining: const Duration(minutes: 5),
     );
-
-    //
-    // The notification should already have been scheduled for task end.
-    //
-    // Now the app gives the user five minutes to answer it.
-    //
-
-    _timer = Timer(const Duration(minutes: 5), () {
-      if (state.stage != ScheduleStage.taskCompletionGrace) {
-        return;
-      }
-
-      _taskFailed();
-    });
   }
-
-  void _resumeCompletionGrace() {
-    _timer?.cancel();
-
-    _timer = Timer(state.remaining, () {
-      if (state.stage != ScheduleStage.taskCompletionGrace) {
-        return;
-      }
-
-      _taskFailed();
-    });
-  }
-
   //
   // YES on:
   //
@@ -562,6 +571,10 @@ class SchedulerService {
 
     await NotificationService.instance.notifications.cancel(
       _completionNotificationId(index),
+    );
+
+    await NotificationService.instance.notifications.cancel(
+      _completionGraceExpiryNotificationId(index),
     );
 
     _taskCompleted();
@@ -585,6 +598,10 @@ class SchedulerService {
 
     await NotificationService.instance.notifications.cancel(
       _completionNotificationId(index),
+    );
+
+    await NotificationService.instance.notifications.cancel(
+      _completionGraceExpiryNotificationId(index),
     );
 
     _taskFailed();
@@ -720,7 +737,7 @@ class SchedulerService {
   // TASK START
   // ===========================================================================
 
-  void _startTask(int index) {
+  Future<void> _startTask(int index) async {
     stop();
 
     final now = DateTime.now();
@@ -734,12 +751,14 @@ class SchedulerService {
     //
     // Schedule the accountability notification through Android.
     //
-    _scheduleRandomNotification();
+    await _scheduleRandomNotification();
 
     //
     // Schedule the task-finished notification through Android.
     //
-    _scheduleTaskCompletionNotification();
+    await _scheduleTaskCompletionNotification();
+
+    await _scheduleCompletionGraceExpiry();
 
     //
     // Keep the in-app countdown running.
@@ -899,6 +918,10 @@ class SchedulerService {
 
     await NotificationService.instance.notifications.cancel(
       _completionNotificationId(index),
+    );
+
+    await NotificationService.instance.notifications.cancel(
+      _completionGraceExpiryNotificationId(index),
     );
 
     await NotificationService.instance.notifications.cancel(

@@ -10,13 +10,23 @@ class SchedulerProvider extends ChangeNotifier {
 
   bool get hasScheduler => _scheduler != null;
 
+  // ---------------------------------------------------------------------------
+  // PLAN
+  // ---------------------------------------------------------------------------
+
   void loadPlan(DayPlan plan) {
     _scheduler?.stop();
 
     _scheduler = SchedulerService(plan);
 
     _scheduler!.onStateChanged = notifyListeners;
+
+    notifyListeners();
   }
+
+  // ---------------------------------------------------------------------------
+  // SCHEDULER CONTROLS
+  // ---------------------------------------------------------------------------
 
   void start() {
     _scheduler?.start();
@@ -38,23 +48,40 @@ class SchedulerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void answeredYes() {
-    _scheduler?.answeredYes();
+  void completionGraceExpired() {
+    _scheduler?.completionGraceExpired();
     notifyListeners();
   }
 
-  void answeredNo() {
-    _scheduler?.answeredNo();
+  // ---------------------------------------------------------------------------
+  // ACCOUNTABILITY NOTIFICATIONS
+  // ---------------------------------------------------------------------------
+
+  Future<void> answeredYes() async {
+    await _scheduler?.answeredYes();
+
     notifyListeners();
   }
 
-  void taskCompletedYes() {
-    _scheduler?.taskCompletedYes();
+  Future<void> answeredNo() async {
+    await _scheduler?.answeredNo();
+
     notifyListeners();
   }
 
-  void taskCompletedNo() {
-    _scheduler?.taskCompletedNo();
+  // ---------------------------------------------------------------------------
+  // TASK COMPLETION NOTIFICATIONS
+  // ---------------------------------------------------------------------------
+
+  Future<void> taskCompletedYes() async {
+    await _scheduler?.taskCompletedYes();
+
+    notifyListeners();
+  }
+
+  Future<void> taskCompletedNo() async {
+    await _scheduler?.taskCompletedNo();
+
     notifyListeners();
   }
 }

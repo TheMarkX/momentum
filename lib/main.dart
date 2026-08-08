@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:momentum/providers/scheduler_provider.dart';
+import 'package:momentum/services/scheduler_persistance.dart';
 import 'package:provider/provider.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -13,43 +14,64 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize timezone database.
 
-  // Load timezone database.
+  // ---------------------------------------------------------------------------
+  // TIMEZONE
+  // ---------------------------------------------------------------------------
+
   tz.initializeTimeZones();
 
-  // Get the actual device timezone.
   final timezoneInfo = await FlutterTimezone.getLocalTimezone();
 
-  // Tell timezone package which timezone is local.
   tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
+
+  // ---------------------------------------------------------------------------
+  // SCHEDULER
+  // ---------------------------------------------------------------------------
+
+  await SchedulerPersistence.instance.load();
 
   final schedulerProvider = SchedulerProvider();
 
+  // ---------------------------------------------------------------------------
+  // NOTIFICATIONS
+  // ---------------------------------------------------------------------------
+
   await NotificationService.instance.initialize(
-    onAction: (actionId, payload) {
-      switch (actionId) {
-        case "accountability_yes":
-          schedulerProvider.answeredYes();
-          break;
+    onAction: (actionId, payload) async {
+      if (actionId == 'task_completed_yes') {
+        schedulerProvider.taskCompletedYes();
+        return;
+      }
 
-        case "accountability_no":
-          schedulerProvider.answeredNo();
-          break;
+      if (actionId == 'task_completed_no') {
+        schedulerProvider.taskCompletedNo();
+        return;
+      }
 
-        case "task_completed_yes":
-          schedulerProvider.taskCompletedYes();
-          break;
+      if (actionId == 'accountability_yes') {
+        schedulerProvider.answeredYes();
+        return;
+      }
 
-        case "task_completed_no":
-          schedulerProvider.taskCompletedNo();
-          break;
+      if (actionId == 'accountability_no') {
+        schedulerProvider.answeredNo();
+        return;
+      }
+
+      if (payload != null && payload.startsWith('completion_grace_expired:')) {
+        schedulerProvider.completionGraceExpired();
+        return;
       }
     },
   );
 
+  // ---------------------------------------------------------------------------
+  // APP
+  // ---------------------------------------------------------------------------
+
   runApp(
-    ChangeNotifierProvider.value(
+    ChangeNotifierProvider<SchedulerProvider>.value(
       value: schedulerProvider,
       child: const MomentumApp(),
     ),
@@ -64,7 +86,7 @@ class MomentumApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
-      title: "Momentum",
+      title: 'Momentum',
       theme: AppTheme.dark,
       home: const Dashboard(),
     );
