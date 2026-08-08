@@ -38,6 +38,7 @@ dependencies:
   shared_preferences: ^2.5.3
   flutter_local_notifications: ^19.4.2
   timezone: ^0.10.1
+  flutter_timezone: ^5.0.0
   fl_chart: ^1.1.1
   google_fonts: ^6.3.0
   uuid: ^4.5.1

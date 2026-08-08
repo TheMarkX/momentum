@@ -18,10 +18,12 @@ class WorkingScreen extends StatelessWidget {
     final state = scheduler.state;
 
     final remaining = state.remaining;
+
     final minutes = remaining.inMinutes
         .remainder(60)
         .toString()
         .padLeft(2, '0');
+
     final seconds = remaining.inSeconds
         .remainder(60)
         .toString()
@@ -47,6 +49,12 @@ class WorkingScreen extends StatelessWidget {
         } else {
           nextTitle = "Finish";
         }
+        break;
+
+      case ScheduleStage.taskCompletionGrace:
+        currentTitle = "Task Time Finished";
+
+        nextTitle = scheduler.currentTask.title;
         break;
 
       case ScheduleStage.breakTime:
@@ -96,6 +104,16 @@ class WorkingScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+
+              if (state.stage == ScheduleStage.taskCompletionGrace) ...[
+                const SizedBox(height: 12),
+
+                const Text(
+                  "Did you complete this task?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                ),
+              ],
 
               const Spacer(),
 

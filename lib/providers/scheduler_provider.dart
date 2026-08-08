@@ -37,4 +37,24 @@ class SchedulerProvider extends ChangeNotifier {
     _scheduler?.resume();
     notifyListeners();
   }
+
+  void answeredYes() {
+    _scheduler?.answeredYes();
+    notifyListeners();
+  }
+
+  void answeredNo() {
+    _scheduler?.answeredNo();
+    notifyListeners();
+  }
+
+  void taskCompletedYes() {
+    _scheduler?.taskCompletedYes();
+    notifyListeners();
+  }
+
+  void taskCompletedNo() {
+    _scheduler?.taskCompletedNo();
+    notifyListeners();
+  }
 }

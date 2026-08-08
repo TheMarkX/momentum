@@ -1,5 +1,4 @@
-enum ScheduleStage { waiting, task, breakTime, finished }
-
+enum ScheduleStage { waiting, task, taskCompletionGrace, breakTime, finished }
 class SchedulerState {
   final ScheduleStage stage;
 
