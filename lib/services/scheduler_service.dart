@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:momentum/services/notification_service.dart';
+import 'package:momentum/services/scheduler_persistance.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/day_plan.dart';
@@ -16,10 +17,7 @@ class SchedulerService {
 
   SchedulerService(this.plan, {this.startImmediately = true});
 
-  // ---------------------------------------------------------------------------
   // IN-APP TIMERS
-  // ---------------------------------------------------------------------------
-
   Timer? _timer;
   Timer? _rescheduleTimer;
 
@@ -33,10 +31,7 @@ class SchedulerService {
 
   bool _paused = false;
 
-  // ---------------------------------------------------------------------------
   // ACCOUNTABILITY STATE
-  // ---------------------------------------------------------------------------
-
   final Random _random = Random();
 
   bool _answeredYes = false;
@@ -44,9 +39,7 @@ class SchedulerService {
 
   DateTime? _currentTaskEndsAt;
 
-  // ---------------------------------------------------------------------------
   // NOTIFICATION IDS
-  // ---------------------------------------------------------------------------
 
   //
   // We use different IDs for different notification types.
@@ -84,10 +77,7 @@ class SchedulerService {
     return 5000 + taskIndex;
   }
 
-  // ---------------------------------------------------------------------------
   // GETTERS
-  // ---------------------------------------------------------------------------
-
   DayPlan get dayPlan => plan;
 
   Task get currentTask => plan.tasks[state.currentTaskIndex];
@@ -111,10 +101,7 @@ class SchedulerService {
 
   bool get isPaused => _paused;
 
-  // ---------------------------------------------------------------------------
   // PUBLIC API
-  // ---------------------------------------------------------------------------
-
   void start() {
     stop();
 
@@ -239,18 +226,7 @@ class SchedulerService {
 
     _notify();
   }
-
-  // ===========================================================================
   // ACCOUNTABILITY NOTIFICATIONS
-  // ===========================================================================
-
-  //
-  // IMPORTANT:
-  //
-  // This does NOT use Timer.
-  //
-  // Android receives the notification schedule directly.
-  //
 
   Future<void> _scheduleAccountabilityNotification() async {
     if (_answeredYes) {
@@ -273,19 +249,11 @@ class SchedulerService {
 
     final now = DateTime.now();
 
-    //
-    // Don't schedule past the task's end.
-    //
     final remainingUntilEnd = taskEnd.difference(now);
 
     if (remainingUntilEnd <= Duration.zero) {
       return;
     }
-
-    //
-    // If the random delay would take us to/past the task end,
-    // don't schedule the notification.
-    //
     if (delay >= remainingUntilEnd) {
       return;
     }
@@ -392,14 +360,7 @@ class SchedulerService {
     }
   }
 
-  // ---------------------------------------------------------------------------
   // ACCOUNTABILITY ACTIONS
-  // ---------------------------------------------------------------------------
-
-  //
-  // Called by NotificationService when the user presses YES.
-  //
-
   Future<void> answeredYes() async {
     if (_answeredYes) {
       return;
@@ -410,12 +371,6 @@ class SchedulerService {
     await _cancelAccountabilityNotification();
   }
 
-  //
-  // Called by NotificationService when the user presses NO.
-  //
-  // This schedules another Android notification.
-  //
-
   Future<void> answeredNo() async {
     if (_answeredYes) {
       return;
@@ -423,11 +378,13 @@ class SchedulerService {
 
     _noCount++;
 
+    // PERSIST ACCOUNTABILITY COUNT
+    await SchedulerPersistence.instance.saveNoCount(_noCount);
+
     await _cancelAccountabilityNotification();
 
-    //
-    // Check whether the task has already ended.
-    //
+    // CHECK TASK STATE
+
     if (state.stage != ScheduleStage.task) {
       return;
     }
@@ -435,7 +392,7 @@ class SchedulerService {
     if (_currentTaskEndsAt == null) {
       return;
     }
-
+    // SCHEDULE MORE FREQUENT ACCOUNTABILITY
     await _scheduleAccountabilityNotification();
   }
 
@@ -447,23 +404,16 @@ class SchedulerService {
     );
   }
 
-  void _cancelAccountability() {
-    _cancelAccountabilityNotification();
+  Future<void> _cancelAccountability() async {
+    await _cancelAccountabilityNotification();
 
     _answeredYes = false;
     _noCount = 0;
+
+    await SchedulerPersistence.instance.saveNoCount(0);
   }
 
-  // ===========================================================================
   // TASK COMPLETION GRACE PERIOD
-  // ===========================================================================
-
-  //
-  // This notification is ALSO scheduled through Android.
-  //
-  // It fires exactly when the task timer ends.
-  //
-
   Future<void> _scheduleTaskCompletionNotification() async {
     final taskIndex = state.currentTaskIndex;
 
@@ -535,29 +485,42 @@ class SchedulerService {
     );
   }
 
-  //
-  // When the app itself reaches the task end while running.
-  //
-  // We move into the 5-minute grace state.
-  //
-
-  void _startCompletionGrace() {
-    _cancelAccountability();
+  Future<void> _startCompletionGrace() async {
+    await _cancelAccountability();
 
     final index = state.currentTaskIndex;
 
+    // PERSIST COMPLETION GRACE STATE
+    await SchedulerPersistence.instance.markCompletionGrace();
+
+    // UPDATE SCHEDULER STATE
     _setState(
       stage: ScheduleStage.taskCompletionGrace,
       taskIndex: index,
       remaining: const Duration(minutes: 5),
     );
+
+    // START 5-MINUTE GRACE COUNTDOWN
+    _timer?.cancel();
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final remaining = state.remaining - const Duration(seconds: 1);
+
+      if (remaining <= Duration.zero) {
+        _timer?.cancel();
+        _timer = null;
+
+        completionGraceExpired();
+        return;
+      }
+
+      _setState(
+        stage: ScheduleStage.taskCompletionGrace,
+        taskIndex: index,
+        remaining: remaining,
+      );
+    });
   }
-  //
-  // YES on:
-  //
-  // "Task Time Finished
-  //  Have you done your task?"
-  //
 
   Future<void> taskCompletedYes() async {
     if (state.stage != ScheduleStage.taskCompletionGrace) {
@@ -580,12 +543,6 @@ class SchedulerService {
     _taskCompleted();
   }
 
-  //
-  // NO on the completion notification.
-  //
-  // This is the ONLY NO that fails the task.
-  //
-
   Future<void> taskCompletedNo() async {
     if (state.stage != ScheduleStage.taskCompletionGrace) {
       return;
@@ -607,35 +564,21 @@ class SchedulerService {
     _taskFailed();
   }
 
-  // ===========================================================================
   // COMPLETED TASK
-  // ===========================================================================
-
   void _taskCompleted() {
     final index = state.currentTaskIndex;
 
     NotificationService.instance.notifications.cancel(
       _completionNotificationId(index),
     );
-
-    //
-    // No next task.
-    //
     if (index + 1 >= plan.tasks.length) {
       _finishSchedule();
       return;
     }
-
-    //
-    // Start the configured break.
-    //
     _startBreak(index);
   }
 
-  // ===========================================================================
   // FAILED / RESCHEDULED TASK
-  // ===========================================================================
-
   Future<void> _taskFailed() async {
     final index = state.currentTaskIndex;
 
@@ -649,10 +592,6 @@ class SchedulerService {
       _moveToNextTaskOrFinish(index);
       return;
     }
-
-    //
-    // Reschedule 10 minutes after the ORIGINAL task end.
-    //
     final rescheduledStart = taskEnd.add(const Duration(minutes: 10));
 
     final workingEnd = DateTime(
@@ -663,10 +602,6 @@ class SchedulerService {
       plan.endTime.minute,
     );
 
-    //
-    // If the new start would be outside working hours,
-    // don't reschedule it.
-    //
     if (rescheduledStart.isAfter(workingEnd)) {
       _moveToNextTaskOrFinish(index);
       return;
@@ -733,10 +668,7 @@ class SchedulerService {
     }
   }
 
-  // ===========================================================================
   // TASK START
-  // ===========================================================================
-
   Future<void> _startTask(int index) async {
     stop();
 
@@ -746,30 +678,29 @@ class SchedulerService {
 
     _currentTaskEndsAt = now.add(duration);
 
+    // PERSIST TASK STATE
+
+    await SchedulerPersistence.instance.saveTask(
+      taskIndex: index,
+      taskEndsAt: _currentTaskEndsAt!,
+    );
+
     _setState(stage: ScheduleStage.task, taskIndex: index, remaining: duration);
 
-    //
-    // Schedule the accountability notification through Android.
-    //
+    // ACCOUNTABILITY NOTIFICATION
     await _scheduleRandomNotification();
 
-    //
-    // Schedule the task-finished notification through Android.
-    //
+    // TASK COMPLETION NOTIFICATION
     await _scheduleTaskCompletionNotification();
 
+    // COMPLETION GRACE EXPIRY
     await _scheduleCompletionGraceExpiry();
 
-    //
-    // Keep the in-app countdown running.
-    //
+    // IN-APP COUNTDOWN
     _resumeTask();
   }
 
-  // ===========================================================================
   // TASK TIMER
-  // ===========================================================================
-
   void _resumeTask() {
     _timer?.cancel();
 
@@ -792,10 +723,7 @@ class SchedulerService {
     });
   }
 
-  // ===========================================================================
   // WAITING
-  // ===========================================================================
-
   void _resumeWaiting() {
     _timer?.cancel();
 
@@ -818,10 +746,7 @@ class SchedulerService {
     });
   }
 
-  // ===========================================================================
   // BREAK
-  // ===========================================================================
-
   void _startBreak(int index) {
     stop();
 
@@ -905,10 +830,7 @@ class SchedulerService {
     });
   }
 
-  // ===========================================================================
   // CANCEL SCHEDULED NOTIFICATIONS
-  // ===========================================================================
-
   Future<void> _cancelCurrentTaskNotifications() async {
     final index = state.currentTaskIndex;
 
@@ -933,10 +855,7 @@ class SchedulerService {
     );
   }
 
-  // ===========================================================================
   // FINISH
-  // ===========================================================================
-
   void _finishSchedule() {
     stop();
 
@@ -947,10 +866,7 @@ class SchedulerService {
     );
   }
 
-  // ===========================================================================
   // HELPERS
-  // ===========================================================================
-
   String _formatTime(DateTime time) {
     final hour = time.hour % 12 == 0 ? 12 : time.hour % 12;
 
@@ -961,10 +877,7 @@ class SchedulerService {
     return '$hour:$minute $period';
   }
 
-  // ===========================================================================
   // STATE
-  // ===========================================================================
-
   void _setState({
     required ScheduleStage stage,
     required int taskIndex,
