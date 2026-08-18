@@ -1,17 +1,49 @@
-# momentum
+# Momentum
 
-A new Flutter project.
+Momentum is a productivity and task scheduling application built with Flutter. It is designed around structured working hours, task execution, accountability, completion confirmation, breaks, and automatic rescheduling of unfinished work.
 
-## Getting Started
+The project focuses on maintaining a reliable daily workflow while ensuring that failed or unfinished tasks are not silently lost.
 
-This project is a starting point for a Flutter application.
+---
 
-A few resources to get you started if this is your first Flutter project:
+## Overview
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Momentum provides a structured scheduling system for users who want their workday to operate according to a predefined plan rather than relying entirely on manual time management.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The scheduler manages:
+
+- Daily working hours
+- Ordered tasks
+- Task durations
+- Breaks between tasks
+- Task completion confirmation
+- Completion grace periods
+- Accountability notifications
+- Failed task detection
+- Automatic retry scheduling
+- Multiple rescheduled tasks
+- Working-hours constraints
+- Cross-day task rescheduling
+- Persistent retry queues
+- Recovery after application restarts
+- Dynamic working-hours changes
+
+The core scheduling principle is simple:
+
+> A task that is not completed should be rescheduled rather than forgotten.
+
+---
+
+## Features
+
+### Task Scheduling
+
+Momentum executes tasks according to a configured `DayPlan`.
+
+Each task can contain:
+
+- Title
+- Duration
+- Position in the schedule
+
+Tasks are processed sequentially and transition through the scheduler's state machine.
